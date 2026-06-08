@@ -1,0 +1,17 @@
+openai-whisper
+opencv-python numpy
+pyttsx3
+paho-mqtt
+sounddevice
+numpy
+pandas
+playsound3
+pyaudio
+pyserial
+pygame
+ultralytics
+SpeechRecognition
+torch torchvision torchaudio
+gTTS
+scikit-learn
+firebase-admin

@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>AURA Dashboard</title>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    body {
+      background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+      color: white;
+      font-family: Arial;
+      text-align: center;
+      transition: 0.4s;
+    }
+
+    body.light {
+      background: #f5f5f5;
+      color: black;
+    }
+
+    h1 {
+      color: #00ffc3;
+      text-shadow: 0 0 10px #00ffc3;
+    }
+
+    body.light h1 {
+      color: #00796b;
+      text-shadow: none;
+    }
+
+    .card {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      padding: 20px;
+      margin: 10px;
+      border-radius: 15px;
+      display: inline-block;
+      width: 260px;
+      box-shadow: 0 0 15px rgba(0,255,195,0.2);
+      transition: 0.3s;
+    }
+
+    body.light .card {
+      background: white;
+      color: black;
+      box-shadow: 0 0 10px rgba(0,0,0,0.2);
+    }
+
+    .card:hover {
+      transform: scale(1.05);
+      box-shadow: 0 0 25px rgba(0,255,195,0.5);
+    }
+
+    canvas {
+      background: white;
+      border-radius: 10px;
+    }
+
+    #alertBox {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: linear-gradient(45deg, red, orange);
+      color: white;
+      padding: 15px;
+      border-radius: 10px;
+      display: none;
+      font-weight: bold;
+      box-shadow: 0 0 15px red;
+    }
+
+    #camera {
+      width: 400px;
+      border-radius: 10px;
+      margin-top: 10px;
+      box-shadow: 0 0 15px #00ffc3;
+    }
+
+    .status-on {
+      color: #00ff00;
+      font-weight: bold;
+    }
+
+    .status-off {
+      color: red;
+      font-weight: bold;
+    }
+
+    /* 🌗 THEME TOGGLE */
+    #themeToggle {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: #1e1e1e;
+      padding: 10px 15px;
+      border-radius: 20px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.5);
+      cursor: pointer;
+    }
+
+    body.light #themeToggle {
+      background: #ddd;
+    }
+
+  </style>
+</head>
+
+<body>
+
+<h1>AURA AI Dashboard</h1>
+
+<div id="alertBox"></div>
+
+<!-- SENSOR DATA -->
+<div class="card">
+  <h2>Sensor Data</h2>
+  <p>Mic: <span id="mic">--</span></p>
+  <p>Rain: <span id="rain">--</span></p>
+  <p>RF: <span id="rf">--</span></p>
+  <p>PIR: <span id="pir">--</span></p>
+</div>
+
+<!-- DEVICE STATUS -->
+<div class="card">
+  <h2>Device Status</h2>
+  <p>Light: <span id="light">--</span></p>
+  <p>Fan: <span id="fan">--</span></p>
+</div>
+
+<!-- GRAPH -->
+<div class="card">
+  <h2>Live Sensor Graph</h2>
+  <canvas id="sensorChart" width="400" height="200"></canvas>
+</div>
+
+<!-- PIE CHART -->
+<div class="card">
+  <h2>Sensor Distribution</h2>
+  <canvas id="pieChart" width="300" height="200"></canvas>
+</div>
+
+<!-- CAMERA -->
+<div class="card">
+  <h2>Live Camera Feed</h2>
+  <img id="camera" src="http://localhost:5000/video_feed">
+</div>
+
+<!-- 🌗 THEME TOGGLE BUTTON -->
+<div id="themeToggle">
+  <label>
+    <input type="checkbox" id="toggleSwitch">
+    Light Mode
+  </label>
+</div>
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyDqNdMFWJ-RKrcLRPKDFr4VF7Rj12vZ-Yw",
+  authDomain: "aura-ai-dfd1a.firebaseapp.com",
+  databaseURL: "https://aura-ai-dfd1a-default-rtdb.firebaseio.com",
+  projectId: "aura-ai-dfd1a",
+  storageBucket: "aura-ai-dfd1a.firebasestorage.app",
+  messagingSenderId: "711779658880",
+  appId: "1:711779658880:web:6a0f10bd4829347a420a65"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+// -------- THEME TOGGLE --------
+const toggle = document.getElementById("toggleSwitch");
+
+// Load saved theme
+if(localStorage.getItem("theme") === "light"){
+  document.body.classList.add("light");
+  toggle.checked = true;
+}
+
+toggle.addEventListener("change", () => {
+  if(toggle.checked){
+    document.body.classList.add("light");
+    localStorage.setItem("theme", "light");
+  } else {
+    document.body.classList.remove("light");
+    localStorage.setItem("theme", "dark");
+  }
+});
+
+// -------- GRAPH --------
+let labels = [];
+let micData = [];
+let rainData = [];
+let rfData = [];
+
+const ctx = document.getElementById('sensorChart').getContext('2d');
+
+const chart = new Chart(ctx, {
+  type: 'line',
+  data: {
+    labels: labels,
+    datasets: [
+      { label: "Mic", data: micData, borderColor: "#00ffc3", tension: 0.4 },
+      { label: "Rain", data: rainData, borderColor: "#00bfff", tension: 0.4 },
+      { label: "RF", data: rfData, borderColor: "#ff00ff", tension: 0.4 }
+    ]
+  }
+});
+
+// -------- PIE --------
+const pieCtx = document.getElementById('pieChart').getContext('2d');
+
+const pieChart = new Chart(pieCtx, {
+  type: 'pie',
+  data: {
+    labels: ["Mic", "Rain", "RF"],
+    datasets: [{
+      data: [0,0,0],
+      backgroundColor: ["#00ffc3", "#00bfff", "#ff00ff"]
+    }]
+  }
+});
+
+// -------- ALERT --------
+function showAlert(msg) {
+  const box = document.getElementById("alertBox");
+  box.innerText = msg;
+  box.style.display = "block";
+
+  setTimeout(() => {
+    box.style.display = "none";
+  }, 3000);
+}
+
+// -------- SENSOR --------
+db.ref("aura/sensors").on("value", function(snapshot) {
+  let data = snapshot.val();
+  if(data){
+
+    document.getElementById("mic").innerText = data.mic;
+    document.getElementById("rain").innerText = data.rain;
+    document.getElementById("rf").innerText = data.rf;
+    document.getElementById("pir").innerText = data.pir;
+
+    let time = new Date().toLocaleTimeString();
+
+    labels.push(time);
+    micData.push(data.mic);
+    rainData.push(data.rain);
+    rfData.push(data.rf);
+
+    if(labels.length > 10){
+      labels.shift();
+      micData.shift();
+      rainData.shift();
+      rfData.shift();
+    }
+
+    chart.update();
+
+    pieChart.data.datasets[0].data = [data.mic, data.rain, data.rf];
+    pieChart.update();
+
+    if(data.pir == 1 || data.mic > 80){
+      showAlert("🚨 Intruder Detected!");
+    }
+    else if(data.rain < 250){
+      showAlert("🌧 Rain Detected!");
+    }
+    else if(data.rf > 600){
+      showAlert("📡 RF Signal Detected!");
+    }
+  }
+});
+
+// -------- STATUS --------
+// -------- STATUS --------
+db.ref("aura/status").on("value", function(snapshot) {
+  let data = snapshot.val();
+
+  let lightEl = document.getElementById("light");
+  let fanEl = document.getElementById("fan");
+
+  // ✅ DEFAULT = OFF if no data
+  let lightStatus = (data && data.light) ? data.light : "OFF";
+  let fanStatus = (data && data.fan) ? data.fan : "OFF";
+
+  lightEl.innerText = lightStatus;
+  fanEl.innerText = fanStatus;
+
+  lightEl.className = lightStatus === "ON" ? "status-on" : "status-off";
+  fanEl.className = fanStatus === "ON" ? "status-on" : "status-off";
+});
+</script>
+
+</body>
+</html>
